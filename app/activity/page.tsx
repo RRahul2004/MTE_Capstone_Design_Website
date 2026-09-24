@@ -48,6 +48,15 @@ type Comment = {
   attachments?: Attachment[] | null;
   created_at: string;
 };
+type Revision = {
+  id: string | number;
+  entry_id: string | number;
+  revision: number;
+  editor_name?: string | null;
+  title?: string | null;
+  text?: string | null;
+  created_at: string;
+};
 type ActionItem = { text: string; owner: string; due?: string | null; done?: boolean };
 
 type Entry = {
@@ -72,6 +81,8 @@ type Entry = {
   deliverable_type?: DeliverableType | null;
   due_date?: string | null;
   submitted_at?: string | null;
+  edited_at?: string | null;
+  edit_count?: number | null;
   linked_to?: string | number | null;
   user_id?: string | null;
   action_items?: ActionItem[] | null;
@@ -416,6 +427,8 @@ export default function DesignLog() {
   const [stageFilter, setStageFilter] = useState<"All" | Stage>("All");
   const [stageMenu, setStageMenu] = useState<string | number | null>(null);
   const [shown, setShown] = useState(PAGE_SIZE);
+  const [revisions, setRevisions] = useState<Revision[]>([]);
+  const [historyOpen, setHistoryOpen] = useState(false);
   const [expanded, setExpanded] = useState<string | number | null>(null);
   const [focused, setFocused] = useState<string | number | null>(null);
 
@@ -875,7 +888,19 @@ export default function DesignLog() {
     setComments([]);
     setCommentDraft("");
     setCommentFiles([]);
+    setRevisions([]);
+    setHistoryOpen(false);
     if (isLocalId(entry.id)) return;
+    if (entry.edit_count) {
+      createSupabaseClient()
+        .from("entry_revisions")
+        .select("*")
+        .eq("entry_id", entry.id)
+        .order("created_at", { ascending: false })
+        .then(({ data, error }) => {
+          if (!error && data) setRevisions(data as Revision[]);
+        });
+    }
     try {
       const { data, error } = await createSupabaseClient()
         .from("entry_comments")
@@ -1026,6 +1051,19 @@ export default function DesignLog() {
           : supabaseError.message || "Could not move that entry.",
       );
     }
+  }
+
+  function EditedMark({ entry, onClick }: { entry: Entry; onClick?: () => void }) {
+    if (!entry.edited_at) return null;
+    const label = `Edited ${formatDate(entry.edited_at)}${
+      (entry.edit_count || 0) > 1 ? ` · ${entry.edit_count} revisions` : ""
+    }`;
+    if (!onClick) return <span className="dl-edited">{label}</span>;
+    return (
+      <button type="button" className="dl-edited is-button" onClick={onClick}>
+        {label}
+      </button>
+    );
   }
 
   function StagePill({ entry, compact = false }: { entry: Entry; compact?: boolean }) {
@@ -1407,15 +1445,38 @@ export default function DesignLog() {
       if (editingId !== null) {
         const existing = entries.find((item) => item.id === editingId);
         const mergedAttachments = [...(existing?.attachments || []), ...attachments];
+        const nextCount = (existing?.edit_count || 0) + 1;
+        const editedAt = new Date().toISOString();
+
+        // Snapshot the version being replaced BEFORE overwriting it.
+        if (existing) {
+          const { error: revisionError } = await supabase.from("entry_revisions").insert({
+            entry_id: existing.id,
+            revision: nextCount,
+            edited_by: auth.user.id,
+            editor_name: creator,
+            title: existing.title ?? null,
+            text: existing.text,
+          });
+          if (revisionError && revisionError.code !== "42P01") throw revisionError;
+        }
+
         const { error } = await supabase
           .from("activity_logs")
-          .update({ ...editable, attachments: mergedAttachments })
+          .update({ ...editable, attachments: mergedAttachments, edited_at: editedAt, edit_count: nextCount })
           .eq("id", editingId);
         if (error) throw error;
         setEntries((current) =>
           current.map((item) =>
             item.id === editingId
-              ? { ...item, ...editable, attachments: mergedAttachments, created_at: item.created_at }
+              ? {
+                  ...item,
+                  ...editable,
+                  attachments: mergedAttachments,
+                  created_at: item.created_at,
+                  edited_at: editedAt,
+                  edit_count: nextCount,
+                }
               : item,
           ),
         );
@@ -1886,6 +1947,7 @@ export default function DesignLog() {
                         <div className="dl-post-foot">
                           <PeopleStack people={people} />
                           <Byline people={people} />
+                          <EditedMark entry={entry} />
                           <button className="dl-readmore" onClick={() => openReader(entry)}>
                             Read post <span>↗</span>
                           </button>
@@ -2116,6 +2178,7 @@ export default function DesignLog() {
                     <div className="dl-deliv-foot">
                       <PeopleStack people={people} />
                       <Byline people={people} />
+                      <EditedMark entry={entry} />
                       {files.length > 0 && <span className="dl-notecount">{files.length} files</span>}
                       {commentCounts[String(entry.id)] ? (
                         <span className="dl-notecount">{commentCounts[String(entry.id)]} notes</span>
@@ -2174,6 +2237,7 @@ export default function DesignLog() {
                             <Byline people={people} />
                             <span className="dl-tag">{entry.category}</span>
                             <span className="dl-time">{formatTime(entry.created_at)}</span>
+                            <EditedMark entry={entry} />
                             <StagePill entry={entry} />
                             <DeleteButton entry={entry} />
                           </div>
@@ -2380,6 +2444,7 @@ export default function DesignLog() {
                   <Byline people={contributorsOf(readerEntry)} />
                   {usesDiscipline(readerEntry.kind) && <span className="dl-tag">{readerEntry.category}</span>}
                   {readerEntry.kind === "progress" && <StagePill entry={readerEntry} />}
+                  <EditedMark entry={readerEntry} onClick={() => setHistoryOpen((current) => !current)} />
                   {readerEntry.resource_type && <span className="dl-tag">{readerEntry.resource_type}</span>}
                 </div>
 
@@ -2432,6 +2497,52 @@ export default function DesignLog() {
                     if (next) openReader(next);
                   }}
                 />
+
+                {readerEntry.edited_at && historyOpen && (
+                  <section className="dl-history">
+                    <div className="dl-history-head">
+                      <span className="dl-kicker">Edit history</span>
+                      <span className="dl-count">
+                        {readerEntry.edit_count || revisions.length} edit
+                        {(readerEntry.edit_count || revisions.length) === 1 ? "" : "s"} · newest first
+                      </span>
+                      <button type="button" className="dl-readmore" onClick={() => setHistoryOpen(false)}>
+                        Hide <span>↑</span>
+                      </button>
+                    </div>
+
+                    <div className="dl-revision is-current">
+                      <div className="dl-revision-top">
+                        <b>Current version</b>
+                        <span>{formatDate(readerEntry.edited_at)}</span>
+                      </div>
+                    </div>
+
+                    {revisions.length === 0 && (
+                      <p className="dl-thread-empty">
+                        This entry was edited before history was enabled, so earlier versions were not kept.
+                      </p>
+                    )}
+
+                    {revisions.map((revision) => (
+                      <details className="dl-revision" key={revision.id}>
+                        <summary>
+                          <span className="dl-revision-top">
+                            <b>Version {revision.revision}</b>
+                            <span>
+                              replaced {formatDate(revision.created_at)}
+                              {revision.editor_name ? ` · ${prettyName(revision.editor_name)}` : ""}
+                            </span>
+                          </span>
+                        </summary>
+                        <div className="dl-revision-body">
+                          {revision.title && <h4>{revision.title}</h4>}
+                          <Markdown text={revision.text || ""} renderRef={renderRef} />
+                        </div>
+                      </details>
+                    ))}
+                  </section>
+                )}
 
                 {/* ---------- comments / added info ---------- */}
                 <section className="dl-thread">

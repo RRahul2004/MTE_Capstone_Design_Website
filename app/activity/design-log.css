@@ -1527,3 +1527,45 @@ a.dl-file:hover { transform: translateY(-1px); }
 /* nested lists */
 .dl-md li > ul, .dl-md li > ol { margin: 6px 0 2px; padding-left: 18px; }
 .dl-md li > ul li::marker { color: var(--dl-dim); }
+
+/* ==========================================================
+   EDIT HISTORY
+   ========================================================== */
+.dl-edited {
+  padding: 3px 8px; border: 1px dashed var(--dl-line); background: transparent;
+  color: var(--dl-faint); font-family: var(--dl-mono); font-size: 9px;
+  letter-spacing: .08em; text-transform: uppercase; white-space: nowrap;
+}
+.dl-edited.is-button { cursor: pointer; transition: color .16s ease, border-color .16s ease; }
+.dl-edited.is-button:hover { color: var(--dl-accent); border-color: var(--dl-accent); border-style: solid; }
+
+.dl-history {
+  margin-top: 28px; padding: 18px 20px;
+  border: 1px solid var(--dl-line); background: var(--dl-inset);
+}
+.dl-history-head {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 14px;
+  padding-bottom: 12px; margin-bottom: 14px; border-bottom: 1px solid var(--dl-line);
+}
+.dl-history-head .dl-readmore { margin-left: auto; }
+.dl-revision { border-bottom: 1px solid var(--dl-line-soft); }
+.dl-revision:last-child { border-bottom: 0; }
+.dl-revision summary { padding: 11px 2px; cursor: pointer; list-style: none; }
+.dl-revision summary::-webkit-details-marker { display: none; }
+.dl-revision summary::before {
+  content: '▸'; display: inline-block; margin-right: 9px; color: var(--dl-faint);
+  transition: transform .18s ease;
+}
+.dl-revision[open] summary::before { transform: rotate(90deg); }
+.dl-revision summary:hover { color: var(--dl-accent); }
+.dl-revision-top { display: inline-flex; flex-wrap: wrap; align-items: baseline; gap: 10px; }
+.dl-revision-top b { font-family: var(--dl-display); font-size: 14px; font-weight: 600; }
+.dl-revision-top span { color: var(--dl-faint); font-family: var(--dl-mono); font-size: 10px; letter-spacing: .05em; }
+.dl-revision.is-current { padding: 11px 2px; opacity: .75; }
+.dl-revision-body {
+  padding: 4px 0 16px 20px; margin-left: 4px; border-left: 2px solid var(--dl-line);
+}
+.dl-revision-body h4 {
+  margin: 0 0 10px; font-family: var(--dl-display); font-size: 16px; font-weight: 600; letter-spacing: -.02em;
+}
+.dl-revision-body .dl-md { font-size: 13.5px; color: var(--dl-dim); }
