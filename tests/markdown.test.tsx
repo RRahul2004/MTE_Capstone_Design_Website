@@ -53,6 +53,66 @@ test("blocks", async (t) => {
     assert.equal(html("- **a**"), "<ul><li><strong>a</strong></li></ul>"));
 });
 
+test("nested lists", async (t) => {
+  await t.test("two levels, unordered", () =>
+    assert.equal(
+      html("- a\n  - a1\n  - a2\n- b"),
+      "<ul><li>a<ul><li>a1</li><li>a2</li></ul></li><li>b</li></ul>",
+    ));
+  await t.test("ordered nested in unordered", () =>
+    assert.equal(html("- a\n  1. one"), "<ul><li>a<ol><li>one</li></ol></li></ul>"));
+  await t.test("three levels", () =>
+    assert.equal(
+      html("- a\n  - b\n    - c"),
+      "<ul><li>a<ul><li>b<ul><li>c</li></ul></li></ul></li></ul>",
+    ));
+  await t.test("tab indentation", () =>
+    assert.equal(html("- a\n\t- b"), "<ul><li>a<ul><li>b</li></ul></li></ul>"));
+  await t.test("flat list unaffected", () =>
+    assert.equal(html("- a\n- b"), "<ul><li>a</li><li>b</li></ul>"));
+});
+
+test("tables", async (t) => {
+  await t.test("header and rows", () =>
+    assert.equal(
+      html("| a | b |\n| --- | --- |\n| 1 | 2 |"),
+      '<div class="dl-md-table"><table><thead><tr><th style="text-align:left">a</th><th style="text-align:left">b</th></tr></thead>' +
+        '<tbody><tr><td style="text-align:left">1</td><td style="text-align:left">2</td></tr></tbody></table></div>',
+    ));
+  await t.test("alignment markers", () => {
+    const out = html("| a | b | c |\n| :-- | :-: | --: |\n| 1 | 2 | 3 |");
+    assert.ok(out.includes('<th style="text-align:left">a</th>'));
+    assert.ok(out.includes('<th style="text-align:center">b</th>'));
+    assert.ok(out.includes('<th style="text-align:right">c</th>'));
+  });
+  await t.test("inline markup inside cells", () => {
+    const out = html("| a |\n| --- |\n| **bold** |");
+    assert.ok(out.includes("<strong>bold</strong>"));
+  });
+  await t.test("ragged row is padded", () => {
+    const out = html("| a | b |\n| --- | --- |\n| 1 |");
+    assert.ok(out.includes('<td style="text-align:left"></td>'));
+  });
+  await t.test("a pipe without a divider stays a paragraph", () =>
+    assert.equal(html("a | b"), "<p>a | b</p>"));
+});
+
+test("images", async (t) => {
+  await t.test("renders an img", () =>
+    assert.equal(
+      html("![a photo](https://x.com/p.png)"),
+      '<p><img class="dl-md-img" src="https://x.com/p.png" alt="a photo" loading="lazy"/></p>',
+    ));
+  await t.test("empty alt is allowed", () => {
+    const out = html("![](https://x.com/p.png)");
+    assert.ok(out.includes('alt=""'));
+  });
+  await t.test("image is not treated as a link", () => {
+    const out = html("![a](https://x.com/p.png)");
+    assert.ok(!out.includes("<a "), "must not render an anchor");
+  });
+});
+
 test("links", async (t) => {
   await t.test("markdown link", () =>
     assert.equal(

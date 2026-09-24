@@ -85,6 +85,7 @@ const categories: Category[] = [
   "Systems",
   "Application SW",
 ];
+const PAGE_SIZE = 25;
 const stages: Stage[] = ["Backlog", "In progress", "Testing", "Completed"];
 const stageClass = (stage: Stage) => stage.toLowerCase().replace(/\s+/g, "-");
 const deliverableTypes: DeliverableType[] = [
@@ -414,6 +415,7 @@ export default function DesignLog() {
   const [view, setView] = useState<"stream" | "list" | "cards">("stream");
   const [stageFilter, setStageFilter] = useState<"All" | Stage>("All");
   const [stageMenu, setStageMenu] = useState<string | number | null>(null);
+  const [shown, setShown] = useState(PAGE_SIZE);
   const [expanded, setExpanded] = useState<string | number | null>(null);
   const [focused, setFocused] = useState<string | number | null>(null);
 
@@ -468,7 +470,7 @@ export default function DesignLog() {
 
   const tabEntries = useMemo(() => entries.filter((entry) => entry.kind === tab), [entries, tab]);
 
-  const visible = useMemo(() => {
+  const matching = useMemo(() => {
     const needle = query.trim().toLowerCase();
     return tabEntries
       .filter((entry) => tab !== "research" || resource === "All" || entry.resource_type === resource)
@@ -494,6 +496,16 @@ export default function DesignLog() {
           : sortValue(a.created_at) - sortValue(b.created_at),
       );
   }, [category, query, resource, sort, stageFilter, tab, tabEntries]);
+
+  // Render a page at a time: 500 entries in the DOM (each animated) is the
+  // slow part, not the query.
+  const visible = useMemo(() => matching.slice(0, shown), [matching, shown]);
+  const remaining = matching.length - visible.length;
+
+  // Any change of tab, view, or filter starts from the first page again.
+  useEffect(() => {
+    setShown(PAGE_SIZE);
+  }, [category, query, resource, sort, stageFilter, tab, view]);
 
   const grouped = useMemo(() => {
     const buckets: { label: string; items: Entry[] }[] = [];
@@ -1706,7 +1718,8 @@ export default function DesignLog() {
               </h2>
             </div>
             <span className="dl-count">
-              {visible.length} of {tabEntries.length} shown
+              {visible.length} of {matching.length}
+              {matching.length !== tabEntries.length ? ` (filtered from ${tabEntries.length})` : ""} shown
             </span>
           </div>
 
@@ -2201,6 +2214,21 @@ export default function DesignLog() {
                 </AnimatePresence>
               </div>
             ))}
+              {!loading && remaining > 0 && (
+                <div className="dl-loadmore">
+                  <button type="button" className="dl-btn" onClick={() => setShown((current) => current + PAGE_SIZE)}>
+                    Load {Math.min(remaining, PAGE_SIZE)} more
+                  </button>
+                  <span>
+                    {remaining} older {remaining === 1 ? "entry" : "entries"} hidden
+                  </span>
+                  {matching.length > PAGE_SIZE * 2 && (
+                    <button type="button" className="dl-btn dl-btn-ghost" onClick={() => setShown(matching.length)}>
+                      Show all {matching.length}
+                    </button>
+                  )}
+                </div>
+              )}
             </motion.div>
           </AnimatePresence>
         </section>
@@ -2636,6 +2664,8 @@ export default function DesignLog() {
                     <code>`code`</code>
                     <code>[link](url)</code>
                     <code>&gt; quote</code>
+                    <code>| table |</code>
+                    <code>![img](url)</code>
                     <code className="dl-hint-at">@ link an entry · Tab cycles</code>
                   </div>
                   {preview ? (
