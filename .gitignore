@@ -1,0 +1,9 @@
+node_modules/
+.next/
+out/
+.env*
+*.log
+# test build output
+.test-build/
+# typescript incremental cache
+tsconfig.tsbuildinfo
