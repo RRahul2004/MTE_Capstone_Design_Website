@@ -418,7 +418,7 @@ function Byline({ people }: { people: string[] }) {
 
 export default function DesignLog() {
   const [entries, setEntries] = useState<Entry[]>(fallbackEntries);
-  const [tab, setTab] = useState<Kind>("progress");
+  const [tab, setTab] = useState<Kind>("meeting");
   const [category, setCategory] = useState<"All" | Category>("All");
   const [resource, setResource] = useState<"All" | ResourceType>("All");
   const [query, setQuery] = useState("");
@@ -433,7 +433,7 @@ export default function DesignLog() {
   const [focused, setFocused] = useState<string | number | null>(null);
 
   const [composer, setComposer] = useState(false);
-  const [draftKind, setDraftKind] = useState<Kind>("progress");
+  const [draftKind, setDraftKind] = useState<Kind>("meeting");
   const [draftTitle, setDraftTitle] = useState("");
   const [draft, setDraft] = useState("");
   const [preview, setPreview] = useState(false);
