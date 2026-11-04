@@ -2047,3 +2047,37 @@ html[data-theme="light"] .dlx-cta-panel { box-shadow: 5px 5px 0 #181817; }
   .dl-cad-help { gap: 7px; padding: 8px; font-size: 9px; }
   .dl-cad-help span { display: none; }
 }
+
+/* existing attachments in the editor */
+.dl-current-files { display: grid; gap: 7px; margin-bottom: 10px; }
+.dl-current-files-label { color: var(--dl-faint); font-family: var(--dl-mono); font-size: 9px; letter-spacing: .12em; text-transform: uppercase; }
+.dl-file-remove {
+  display: grid; place-items: center; width: 22px; height: 22px; margin-left: 2px; padding: 0;
+  border: 1px solid var(--dl-line); border-radius: 999px; background: transparent;
+  color: var(--dl-dim); cursor: pointer; font-size: 15px; line-height: 1;
+}
+.dl-file-remove:hover { border-color: var(--dl-danger); color: var(--dl-danger); }
+
+/* attached-files panel in the editor */
+.dl-attach-panel { display: grid; gap: 10px; padding: 14px; border: 1px solid var(--dl-line); border-radius: var(--dl-r-sm, 12px); background: var(--dl-panel); }
+.dl-attach-head { display: flex; align-items: center; justify-content: space-between; }
+.dl-attach-head .lbl { color: var(--dl-accent); font-family: var(--dl-mono); font-size: 9px; letter-spacing: .16em; text-transform: uppercase; }
+.dl-attach-count { min-width: 24px; padding: 2px 8px; border-radius: 999px; background: var(--dl-badge); color: var(--dl-dim); font-family: var(--dl-mono); font-size: 10px; text-align: center; }
+.dl-attach-empty { margin: 0; color: var(--dl-faint); font-size: 12.5px; }
+.dl-attach-list { display: grid; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.dl-attach-item {
+  display: grid; grid-template-columns: auto minmax(0, 1fr) auto auto; align-items: center; gap: 9px;
+  padding: 6px 6px 6px 7px; border: 1px solid var(--dl-line-soft); border-radius: var(--dl-r-sm, 12px); background: var(--dl-elev-1);
+}
+.dl-attach-item.is-new { border-style: dashed; border-color: var(--dl-accent); }
+.dl-attach-name { overflow: hidden; color: var(--dl-text); font-size: 12.5px; text-decoration: none; text-overflow: ellipsis; white-space: nowrap; }
+a.dl-attach-name:hover { color: var(--dl-accent); text-decoration: underline; }
+.dl-attach-meta { color: var(--dl-faint); font-family: var(--dl-mono); font-size: 9.5px; white-space: nowrap; }
+.dl-attach-item.is-new .dl-attach-meta { color: var(--dl-accent); }
+.dl-attach-removed { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 8px 10px; border-radius: var(--dl-r-sm, 12px); background: var(--dl-tint-red); color: var(--dl-danger); font-size: 12px; }
+.dl-attach-removed button { border: 0; background: transparent; color: inherit; cursor: pointer; font: 700 12px var(--dl-body); text-decoration: underline; }
+.dl-attach-add { position: relative; display: grid; gap: 3px; padding: 11px 12px; border: 1px dashed var(--dl-line-strong); border-radius: var(--dl-r-sm, 12px); cursor: pointer; text-align: center; transition: border-color .16s ease, background .16s ease; }
+.dl-attach-add:hover, .dl-attach-add:focus-within { border-color: var(--dl-accent); background: var(--dl-elev-hover); }
+.dl-attach-add input { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; }
+.dl-attach-add span { color: var(--dl-text); font-size: 13px; font-weight: 700; }
+.dl-attach-add em { color: var(--dl-faint); font-family: var(--dl-mono); font-size: 9px; font-style: normal; }

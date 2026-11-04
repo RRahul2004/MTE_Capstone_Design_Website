@@ -18,6 +18,7 @@ import {
   STORAGE_BUCKET,
   storagePathsOf,
   uniqueAttachments,
+  attachmentKey,
   embedUrlFor,
   officeViewerUrl,
   parseDelimited,
@@ -558,6 +559,7 @@ export default function DesignLog() {
   const [preview, setPreview] = useState(false);
   const [taggedWith, setTaggedWith] = useState<string[]>([]);
   const [files, setFiles] = useState<File[]>([]);
+  const [keptAttachments, setKeptAttachments] = useState<Attachment[]>([]);
   const [actions, setActions] = useState<ActionItem[]>([{ text: "", owner: "", due: "" }]);
   const [linkedTo, setLinkedTo] = useState<Entry | null>(null);
   const [mention, setMention] = useState<{ query: string; start: number; target: "body" | "comment" } | null>(null);
@@ -747,6 +749,15 @@ export default function DesignLog() {
         .filter((item) => !item.done).length,
     [entries],
   );
+
+  const removedAttachments = useMemo(() => {
+    if (editingId === null) return [];
+    const original = entries.find((item) => item.id === editingId);
+    if (!original) return [];
+    const kept = new Set(keptAttachments);
+    const keptUrls = new Set(keptAttachments.map((item) => item.url));
+    return attachmentsOf(original).filter((item) => !kept.has(item) && !keptUrls.has(item.url));
+  }, [editingId, entries, keptAttachments]);
 
   const editingEntry = useMemo(
     () => (editingId === null ? null : entries.find((entry) => entry.id === editingId) || null),
@@ -964,6 +975,7 @@ export default function DesignLog() {
     setLinkedTo(null);
     setTaggedWith([]);
     setFiles([]);
+    setKeptAttachments([]);
     setActions([{ text: "", owner: "", due: "" }]);
     setDraftKind(tab);
     setDraft(tab === "meeting" ? MEETING_TEMPLATE : "");
@@ -1170,6 +1182,7 @@ export default function DesignLog() {
     setActions(entry.action_items?.length ? entry.action_items : [{ text: "", owner: "", due: "" }]);
     setLinkedTo(entry.linked_to ? byId.get(String(entry.linked_to)) || null : null);
     setFiles([]);
+    setKeptAttachments(attachmentsOf(entry));
     setPreview(false);
     setComposer(true);
   }
@@ -1548,8 +1561,12 @@ export default function DesignLog() {
       }
 
       const uploaded: Attachment[] = [];
+      const existingKeys = new Set((editingId !== null ? keptAttachments : []).map(attachmentKey));
       for (const file of files) {
         if (file.size > 25 * 1024 * 1024) throw new Error(`${file.name} is larger than 25 MB.`);
+        const key = attachmentKey({ name: file.name, url: "", family: familyOf(file.name), size: file.size });
+        if (existingKeys.has(key)) continue; // already attached — don't store a second copy
+        existingKeys.add(key);
         const path = `${auth.user.id}/${crypto.randomUUID()}-${file.name.replace(/[^a-zA-Z0-9._-]/g, "-")}`;
         const { error: uploadError } = await supabase.storage.from("design-files").upload(path, file);
         if (uploadError) throw uploadError;
@@ -1599,7 +1616,9 @@ export default function DesignLog() {
 
       if (editingId !== null) {
         const existing = entries.find((item) => item.id === editingId);
-        const mergedAttachments = uniqueAttachments([...(existing ? attachmentsOf(existing) : []), ...attachments]);
+        const mergedAttachments = uniqueAttachments([...keptAttachments, ...attachments]);
+        const keptUrls = new Set(mergedAttachments.map((item) => item.url));
+        const removedPaths = storagePathsOf((existing ? attachmentsOf(existing) : []).filter((item) => !keptUrls.has(item.url)));
         const nextCount = (existing?.edit_count || 0) + 1;
         const editedAt = new Date().toISOString();
 
@@ -1621,6 +1640,10 @@ export default function DesignLog() {
           .update({ ...editable, attachments: mergedAttachments, edited_at: editedAt, edit_count: nextCount })
           .eq("id", editingId);
         if (error) throw error;
+        if (removedPaths.length) {
+          // Best effort: drop files that were removed in the editor (or were duplicate uploads).
+          await supabase.storage.from(STORAGE_BUCKET).remove(removedPaths).catch(() => undefined);
+        }
         setEntries((current) =>
           current.map((item) =>
             item.id === editingId
@@ -1662,6 +1685,7 @@ export default function DesignLog() {
       setDraftTitle("");
       setTaggedWith([]);
       setFiles([]);
+      setKeptAttachments([]);
       setActions([{ text: "", owner: "", due: "" }]);
       setLinkedTo(null);
       formElement.reset();
@@ -3223,31 +3247,57 @@ export default function DesignLog() {
                     </>
                   )}
 
-                  <div className="dl-field">
-                    <span className="lbl">
-                      Attachments <em>(pdf, docx, xlsx, pptx, stl/step, kicad, images — 25 MB each)</em>
-                    </span>
-                    <input
-                      name="files"
-                      type="file"
-                      multiple
-                      accept={UPLOAD_ACCEPT}
-                      onChange={(event) => setFiles(Array.from(event.target.files || []))}
-                    />
-                    {files.length > 0 && (
-                      <div className="dl-file-row">
-                        {files.map((file) => (
-                          <span className="dl-file" key={file.name}>
-                            <span className={`dl-file-badge f-${familyOf(file.name)}`}>
-                              {FAMILY_ICONS[familyOf(file.name)]}
-                            </span>
-                            <span className="dl-file-name">{file.name}</span>
-                            <span className="dl-file-size">{formatSize(file.size)}</span>
-                          </span>
+                  <section className="dl-attach-panel" aria-label="Attached files">
+                    <div className="dl-attach-head">
+                      <span className="lbl">Attached files</span>
+                      <span className="dl-attach-count">{keptAttachments.length + files.length}</span>
+                    </div>
+                    {keptAttachments.length + files.length === 0 ? (
+                      <p className="dl-attach-empty">No files attached{editingId !== null ? " to this entry" : " yet"}.</p>
+                    ) : (
+                      <ul className="dl-attach-list">
+                        {keptAttachments.map((item) => (
+                          <li className="dl-attach-item" key={`kept-${item.url}-${item.name}`}>
+                            <span className={`dl-file-badge f-${item.family}`}>{FAMILY_ICONS[item.family]}</span>
+                            <a className="dl-attach-name" href={item.url} target="_blank" rel="noreferrer" title={item.name}>{item.name}</a>
+                            <span className="dl-attach-meta">{item.size ? formatSize(item.size) : item.family === "link" ? "Link" : "Saved"}</span>
+                            <button type="button" className="dl-file-remove" aria-label={`Remove ${item.name}`} title="Remove from this entry" onClick={() => setKeptAttachments((current) => current.filter((other) => other !== item))}>×</button>
+                          </li>
                         ))}
+                        {files.map((file) => (
+                          <li className="dl-attach-item is-new" key={`new-${file.name}-${file.size}`}>
+                            <span className={`dl-file-badge f-${familyOf(file.name)}`}>{FAMILY_ICONS[familyOf(file.name)]}</span>
+                            <span className="dl-attach-name" title={file.name}>{file.name}</span>
+                            <span className="dl-attach-meta">New · {formatSize(file.size)}</span>
+                            <button type="button" className="dl-file-remove" aria-label={`Remove ${file.name}`} title="Don't upload this file" onClick={() => setFiles((current) => current.filter((other) => other !== file))}>×</button>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                    {removedAttachments.length > 0 && (
+                      <div className="dl-attach-removed">
+                        <span>{removedAttachments.length} will be removed when you save</span>
+                        <button type="button" onClick={() => setKeptAttachments(editingEntry ? attachmentsOf(editingEntry) : [])}>Undo</button>
                       </div>
                     )}
-                  </div>
+                    <label className="dl-attach-add">
+                      <input
+                        type="file"
+                        multiple
+                        accept={UPLOAD_ACCEPT}
+                        onChange={(event) => {
+                          const picked = Array.from(event.target.files || []);
+                          setFiles((current) => {
+                            const seen = new Set(current.map((file) => `${file.name}:${file.size}`));
+                            return [...current, ...picked.filter((file) => !seen.has(`${file.name}:${file.size}`))];
+                          });
+                          event.target.value = "";
+                        }}
+                      />
+                      <span>+ Add files</span>
+                      <em>pdf, docx, xlsx, pptx, stl/step, kicad, images — 25 MB each</em>
+                    </label>
+                  </section>
 
                   <label className="dl-field">
                     <span className="lbl">

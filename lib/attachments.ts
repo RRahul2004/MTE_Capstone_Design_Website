@@ -110,12 +110,20 @@ export function parseLinks(raw: string): Attachment[] {
     });
 }
 
-/** Removes repeated attachments, matching links even when only the trailing slash differs. */
+/** Identity used to spot the same document stored more than once. */
+export function attachmentKey(item: Pick<Attachment, "name" | "url" | "family" | "size">) {
+  // Re-uploads get a fresh storage path, so uploaded files match on name + size instead of URL.
+  if (item.family !== "link" && item.size) return `file:${item.name.trim().toLowerCase()}:${item.size}`;
+  return `url:${item.url.trim().replace(/#.*$/, "").replace(/\/+$/, "").toLowerCase()}`;
+}
+
+/** Removes repeated attachments (the same link, or the same file uploaded twice). */
 export function uniqueAttachments(items: Attachment[]) {
   const seen = new Set<string>();
   return items.filter((item) => {
-    const key = item.url.trim().replace(/\/+$/, "").toLowerCase();
-    if (!key || seen.has(key)) return false;
+    if (!item?.url) return false;
+    const key = attachmentKey(item);
+    if (seen.has(key)) return false;
     seen.add(key);
     return true;
   });

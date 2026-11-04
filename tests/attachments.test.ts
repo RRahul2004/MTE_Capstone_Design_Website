@@ -33,3 +33,11 @@ test("uniqueAttachments drops a link stored twice", async () => {
   const link = { name: "example.com", url: "https://example.com/", family: "link" as const };
   assert.equal(uniqueAttachments([link, { ...link, url: "https://example.com" }]).length, 1);
 });
+
+test("uniqueAttachments drops the same file uploaded twice", async () => {
+  const { uniqueAttachments } = await import("../lib/attachments");
+  const a = { name: "paper.pdf", url: "https://s/design-files/u/1-paper.pdf", family: "doc" as const, size: 707647 };
+  const b = { ...a, url: "https://s/design-files/u/2-paper.pdf" };
+  assert.equal(uniqueAttachments([a, b]).length, 1);
+  assert.equal(uniqueAttachments([a, { ...b, size: 1 }]).length, 2);
+});
