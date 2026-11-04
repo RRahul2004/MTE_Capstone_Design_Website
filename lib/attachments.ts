@@ -110,6 +110,17 @@ export function parseLinks(raw: string): Attachment[] {
     });
 }
 
+/** Removes repeated attachments, matching links even when only the trailing slash differs. */
+export function uniqueAttachments(items: Attachment[]) {
+  const seen = new Set<string>();
+  return items.filter((item) => {
+    const key = item.url.trim().replace(/\/+$/, "").toLowerCase();
+    if (!key || seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
 export const STORAGE_BUCKET = "design-files";
 
 /** Turns a public storage URL back into the object path inside the bucket. */
@@ -127,4 +138,100 @@ export function storagePathsOf(items: (Attachment | null | undefined)[]) {
     .filter((item): item is Attachment => Boolean(item) && item!.family !== "link")
     .map((item) => storagePath(item.url))
     .filter((path): path is string => Boolean(path));
+}
+
+/* ---------------- in-app preview ---------------- */
+
+export type PreviewKind = "image" | "pdf" | "office" | "markdown" | "table" | "text" | "embed" | "model" | "none";
+
+const BROWSER_IMAGES = ["png", "jpg", "jpeg", "gif", "webp", "svg", "bmp"];
+const OFFICE_DOCS = ["doc", "docx", "xls", "xlsx", "xlsm", "ppt", "pptx", "odt", "ods", "odp", "rtf"];
+const PLAIN_TEXT = ["txt", "json", "yaml", "yml", "xml", "log", "tex", "scad", "gcode", "net"];
+
+/** Builds an embeddable URL for well-known link hosts (Google Docs/Drive, YouTube), or null. */
+export function embedUrlFor(url: string): string | null {
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    return null;
+  }
+  const host = parsed.hostname.replace(/^www\./, "");
+
+  if (host === "docs.google.com") {
+    const match = /^\/(document|spreadsheets|presentation|drawings)\/d\/([^/]+)/.exec(parsed.pathname);
+    if (match) return `https://docs.google.com/${match[1]}/d/${match[2]}/preview`;
+  }
+  if (host === "drive.google.com") {
+    const byPath = /\/file\/d\/([^/]+)/.exec(parsed.pathname);
+    const id = byPath ? byPath[1] : parsed.searchParams.get("id");
+    if (id) return `https://drive.google.com/file/d/${id}/preview`;
+  }
+  if (host === "youtube.com" || host === "m.youtube.com") {
+    const id = parsed.searchParams.get("v");
+    if (id) return `https://www.youtube.com/embed/${id}`;
+  }
+  if (host === "youtu.be") {
+    const id = parsed.pathname.slice(1);
+    if (id) return `https://www.youtube.com/embed/${id}`;
+  }
+  return null;
+}
+
+/** Decides how the viewer should render an attachment. */
+export function previewKindOf(item: Pick<Attachment, "name" | "url" | "family">): PreviewKind {
+  if (item.family === "link") {
+    if (embedUrlFor(item.url)) return "embed";
+    const ext = extensionOf(new URL(item.url, "https://x").pathname);
+    if (ext === "pdf") return "pdf";
+    if (BROWSER_IMAGES.includes(ext)) return "image";
+    return "none";
+  }
+  const ext = extensionOf(item.name) || extensionOf(item.url);
+  if (BROWSER_IMAGES.includes(ext)) return "image";
+  if (["stl", "step", "stp", "kicad_pcb"].includes(ext)) return "model";
+  if (ext === "pdf") return "pdf";
+  if (OFFICE_DOCS.includes(ext)) return "office";
+  if (ext === "md") return "markdown";
+  if (ext === "csv" || ext === "tsv") return "table";
+  if (PLAIN_TEXT.includes(ext)) return "text";
+  return "none";
+}
+
+/** Microsoft's free viewer renders Word/Excel/PowerPoint from any public URL. */
+export function officeViewerUrl(url: string) {
+  return `https://view.officeapps.live.com/op/embed.aspx?src=${encodeURIComponent(url)}`;
+}
+
+/** Minimal CSV/TSV parser that understands quoted cells. */
+export function parseDelimited(text: string, delimiter = ","): string[][] {
+  const rows: string[][] = [];
+  let row: string[] = [];
+  let cell = "";
+  let quoted = false;
+  for (let i = 0; i < text.length; i += 1) {
+    const char = text[i];
+    if (quoted) {
+      if (char === '"' && text[i + 1] === '"') {
+        cell += '"';
+        i += 1;
+      } else if (char === '"') quoted = false;
+      else cell += char;
+    } else if (char === '"' && cell === "") quoted = true;
+    else if (char === delimiter) {
+      row.push(cell);
+      cell = "";
+    } else if (char === "\n" || char === "\r") {
+      if (char === "\r" && text[i + 1] === "\n") i += 1;
+      row.push(cell);
+      rows.push(row);
+      row = [];
+      cell = "";
+    } else cell += char;
+  }
+  if (cell !== "" || row.length) {
+    row.push(cell);
+    rows.push(row);
+  }
+  return rows;
 }

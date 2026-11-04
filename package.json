@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "private": true,
   "scripts": {
+    "postinstall": "node scripts/copy-occt.mjs",
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
@@ -17,13 +18,16 @@
     "discord.js": "^14.27.0",
     "framer-motion": "11.3.19",
     "next": "^14.2.35",
+    "occt-import-js": "^0.0.23",
     "react": "18.3.1",
-    "react-dom": "18.3.1"
+    "react-dom": "18.3.1",
+    "three": "^0.169.0"
   },
   "devDependencies": {
     "@types/node": "20.14.12",
     "@types/react": "18.3.3",
     "@types/react-dom": "18.3.0",
+    "@types/three": "^0.169.0",
     "eslint": "^8.57.0",
     "eslint-config-next": "^14.2.35",
     "tsx": "^4.23.15",

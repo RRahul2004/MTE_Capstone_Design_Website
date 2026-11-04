@@ -17,9 +17,15 @@ import {
   parseLinks,
   STORAGE_BUCKET,
   storagePathsOf,
+  uniqueAttachments,
+  embedUrlFor,
+  officeViewerUrl,
+  parseDelimited,
+  previewKindOf,
 } from "../../lib/attachments";
 import { ThemeToggle, useTheme } from "../../lib/theme";
 import { BrandMark } from "../../lib/BrandLogo";
+import CadViewer from "../../lib/CadViewer";
 import "./design-log.css";
 
 type Kind = "ideation" | "research" | "progress" | "meeting" | "deliverable";
@@ -347,7 +353,7 @@ function attachmentsOf(entry: Entry): Attachment[] {
   const legacy: Attachment[] = [];
   if (entry.photo_url) legacy.push({ name: "Attached photo", url: entry.photo_url, family: "image" });
   if (entry.link_url) legacy.push(...parseLinks(entry.link_url));
-  return [...list, ...legacy];
+  return uniqueAttachments([...list, ...legacy]);
 }
 
 function excerpt(text: string, limit = 260) {
@@ -359,7 +365,7 @@ function excerpt(text: string, limit = 260) {
   return plain.length > limit ? `${plain.slice(0, limit)}…` : plain;
 }
 
-function AttachmentList({ items }: { items: Attachment[] }) {
+function AttachmentList({ items, onPreview }: { items: Attachment[]; onPreview?: (item: Attachment) => void }) {
   if (!items.length) return null;
   return (
     <div className="dl-files">
@@ -367,16 +373,106 @@ function AttachmentList({ items }: { items: Attachment[] }) {
         <div className="dl-file-group" key={group.family}>
           <span className="dl-file-group-label">{group.label}</span>
           <div className="dl-file-row">
-            {group.items.map((item) => (
-              <a className="dl-file" href={item.url} target="_blank" rel="noreferrer" key={`${item.url}-${item.name}`}>
+            {group.items.map((item) => {
+              const canPreview = Boolean(onPreview && previewKindOf(item) !== "none");
+              const content = <>
                 <span className={`dl-file-badge f-${item.family}`}>{FAMILY_ICONS[item.family]}</span>
                 <span className="dl-file-name">{item.name}</span>
                 {item.size ? <span className="dl-file-size">{formatSize(item.size)}</span> : null}
-              </a>
-            ))}
+                <span className="dl-file-action">{canPreview ? "Preview" : "Open"}</span>
+              </>;
+              return canPreview ? (
+                <button className="dl-file dl-file-button" type="button" onClick={() => onPreview?.(item)} key={`${item.url}-${item.name}`}>
+                  {content}
+                </button>
+              ) : (
+                <a className="dl-file" href={item.url} target="_blank" rel="noreferrer" key={`${item.url}-${item.name}`}>
+                  {content}
+                </a>
+              );
+            })}
           </div>
         </div>
       ))}
+    </div>
+  );
+}
+
+function AttachmentPreview({ item, onClose }: { item: Attachment; onClose: () => void }) {
+  const kind = previewKindOf(item);
+  const [loading, setLoading] = useState(kind === "text" || kind === "markdown" || kind === "table");
+  const [error, setError] = useState("");
+  const [text, setText] = useState("");
+  const [zoom, setZoom] = useState(1);
+
+  useEffect(() => {
+    if (!(kind === "text" || kind === "markdown" || kind === "table")) return;
+    let cancelled = false;
+    setLoading(true);
+    setError("");
+    fetch(item.url)
+      .then((response) => {
+        if (!response.ok) throw new Error(`Unable to load file (${response.status})`);
+        return response.text();
+      })
+      .then((value) => { if (!cancelled) setText(value); })
+      .catch((reason: Error) => { if (!cancelled) setError(reason.message); })
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
+  }, [item.url, kind]);
+
+  useEffect(() => {
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => { document.body.style.overflow = previousOverflow; };
+  }, []);
+
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        // Close only the preview, not the reader underneath it.
+        event.stopImmediatePropagation();
+        onClose();
+      }
+      if (event.key === "+" || event.key === "=") setZoom((value) => Math.min(1.6, +(value + .1).toFixed(1)));
+      if (event.key === "-") setZoom((value) => Math.max(.6, +(value - .1).toFixed(1)));
+    };
+    window.addEventListener("keydown", onKey, true);
+    return () => window.removeEventListener("keydown", onKey, true);
+  }, [onClose]);
+
+  const embed = embedUrlFor(item.url);
+  const rows = useMemo(() => kind === "table" ? parseDelimited(text, item.name.toLowerCase().endsWith(".tsv") ? "\t" : ",") : [], [item.name, kind, text]);
+  const title = item.name || "Attachment preview";
+  const zoomOut = () => setZoom((value) => Math.max(.6, +(value - .1).toFixed(1)));
+  const zoomIn = () => setZoom((value) => Math.min(1.6, +(value + .1).toFixed(1)));
+
+  return (
+    <div className="dl-preview-overlay" role="dialog" aria-modal="true" aria-label={`Preview ${title}`} onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
+      <section className="dl-preview-window">
+        <header className="dl-preview-head">
+          <div className="dl-preview-heading">
+            <span className={`dl-file-badge f-${item.family}`}>{FAMILY_ICONS[item.family]}</span>
+            <div><strong>{title}</strong><span>{item.size ? formatSize(item.size) : "In-app preview"}</span></div>
+          </div>
+          <div className="dl-preview-tools">
+            {(kind === "image" || kind === "text" || kind === "markdown" || kind === "table") && <><button type="button" onClick={zoomOut} aria-label="Zoom out">−</button><span>{Math.round(zoom * 100)}%</span><button type="button" onClick={zoomIn} aria-label="Zoom in">+</button></>}
+            <a className="dl-preview-open" href={item.url} target="_blank" rel="noreferrer">Open original</a>
+            <button className="dl-preview-close" type="button" onClick={onClose} aria-label="Close preview" autoFocus>×</button>
+          </div>
+        </header>
+        <div className="dl-preview-body">
+          {kind === "model" && <CadViewer url={item.url} name={item.name} />}
+          {kind === "image" && <div className="dl-image-stage"><img src={item.url} alt={title} style={{ transform: `scale(${zoom})` }} /></div>}
+          {kind === "pdf" && <iframe className="dl-preview-frame" src={`${item.url}#view=FitH`} title={title} />}
+          {kind === "office" && <iframe className="dl-preview-frame" src={officeViewerUrl(item.url)} title={title} />}
+          {kind === "embed" && embed && <iframe className="dl-preview-frame" src={embed} title={title} allow="fullscreen; autoplay" />}
+          {kind === "markdown" && (loading ? <div className="dl-preview-state">Loading file…</div> : error ? <div className="dl-preview-state is-error">{error}<a href={item.url} target="_blank" rel="noreferrer">Open original instead</a></div> : <div className="dl-doc-preview" style={{ fontSize: `${zoom}em` }}><Markdown text={text} /></div>)}
+          {kind === "text" && (loading ? <div className="dl-preview-state">Loading file…</div> : error ? <div className="dl-preview-state is-error">{error}<a href={item.url} target="_blank" rel="noreferrer">Open original instead</a></div> : <pre className="dl-text-preview" style={{ transform: `scale(${zoom})`, transformOrigin: "top left" }}>{text}</pre>)}
+          {kind === "table" && (loading ? <div className="dl-preview-state">Loading table…</div> : error ? <div className="dl-preview-state is-error">{error}</div> : <div className="dl-table-wrap" style={{ fontSize: `${zoom}em` }}><table><tbody>{rows.slice(0, 500).map((row, index) => <tr key={index}>{row.map((cell, cellIndex) => index === 0 ? <th key={cellIndex}>{cell}</th> : <td key={cellIndex}>{cell}</td>)}</tr>)}</tbody></table></div>)}
+          {kind === "none" && <div className="dl-preview-state"><strong>Preview unavailable for this file type.</strong><span>Open the original file in a new tab to view it.</span><a href={item.url} target="_blank" rel="noreferrer">Open original</a></div>}
+        </div>
+      </section>
     </div>
   );
 }
@@ -453,6 +549,7 @@ export default function DesignLog() {
   const [historyOpen, setHistoryOpen] = useState(false);
   const [expanded, setExpanded] = useState<string | number | null>(null);
   const [focused, setFocused] = useState<string | number | null>(null);
+  const [previewItem, setPreviewItem] = useState<Attachment | null>(null);
 
   const [composer, setComposer] = useState(false);
   const [draftKind, setDraftKind] = useState<Kind>("meeting");
@@ -1007,7 +1104,7 @@ export default function DesignLog() {
         author_name: resolveDisplayName(auth.user),
         author_email: auth.user.email || userEmail,
         text,
-        attachments: [...uploaded, ...links],
+        attachments: uniqueAttachments([...uploaded, ...links]),
       };
       const { data, error } = await supabase.from("entry_comments").insert(comment).select().single();
       if (error) throw error;
@@ -1465,7 +1562,7 @@ export default function DesignLog() {
       }
 
       const creator = resolveDisplayName(auth.user);
-      const attachments = [...uploaded, ...links];
+      const attachments = uniqueAttachments([...uploaded, ...links]);
       const entry: Omit<Entry, "id"> & { user_id: string } = {
         user_id: auth.user.id,
         kind: draftKind,
@@ -1482,7 +1579,9 @@ export default function DesignLog() {
         worked_with: taggedWith.filter((name) => name !== creator),
         attachments,
         photo_url: null,
-        link_url: links[0]?.url || null,
+        // Links live in attachments; keep link_url null for new rows so they are not rendered twice.
+        // attachmentsOf still reads link_url for older rows created before attachments existed.
+        link_url: null,
         resource_type: draftKind === "research" ? resourceType || "Paper" : null,
         resource_authors: draftKind === "research" ? resourceAuthors : null,
         resource_source: draftKind === "research" ? resourceSource : null,
@@ -1500,7 +1599,7 @@ export default function DesignLog() {
 
       if (editingId !== null) {
         const existing = entries.find((item) => item.id === editingId);
-        const mergedAttachments = [...(existing?.attachments || []), ...attachments];
+        const mergedAttachments = uniqueAttachments([...(existing ? attachmentsOf(existing) : []), ...attachments]);
         const nextCount = (existing?.edit_count || 0) + 1;
         const editedAt = new Date().toISOString();
 
@@ -2039,7 +2138,7 @@ export default function DesignLog() {
                         ) : (
                           <p className="dl-post-excerpt">{excerpt(entry.text)}</p>
                         )}
-                        <AttachmentList items={attachmentsOf(entry)} />
+                        <AttachmentList items={attachmentsOf(entry)} onPreview={setPreviewItem} />
                         <LinkChips
                           source={entry.linked_to ? byId.get(String(entry.linked_to)) : null}
                           spawned={childrenOf.get(String(entry.id))}
@@ -2112,7 +2211,7 @@ export default function DesignLog() {
                               {open ? <Markdown text={entry.text} renderRef={renderRef} /> : <p>{excerpt(entry.text, 190)}</p>}
                             </div>
                           )}
-                          <AttachmentList items={attachmentsOf(entry)} />
+                          <AttachmentList items={attachmentsOf(entry)} onPreview={setPreviewItem} />
                           <LinkChips
                             source={entry.linked_to ? byId.get(String(entry.linked_to)) : null}
                             spawned={childrenOf.get(String(entry.id))}
@@ -2214,7 +2313,7 @@ export default function DesignLog() {
                     </div>
                   )}
 
-                  <AttachmentList items={attachmentsOf(entry)} />
+                  <AttachmentList items={attachmentsOf(entry)} onPreview={setPreviewItem} />
 
                   <div className="dl-meeting-foot">
                     <LinkChips
@@ -2270,7 +2369,7 @@ export default function DesignLog() {
                       </button>
                     </h3>
                     {entry.text && <p className="dl-post-excerpt">{excerpt(entry.text, 180)}</p>}
-                    <AttachmentList items={files} />
+                    <AttachmentList items={files} onPreview={setPreviewItem} />
                     <LinkChips
                       source={entry.linked_to ? byId.get(String(entry.linked_to)) : null}
                       spawned={childrenOf.get(String(entry.id))}
@@ -2350,7 +2449,7 @@ export default function DesignLog() {
                             </h3>
                           )}
                           <Markdown text={entry.text} renderRef={renderRef} />
-                          <AttachmentList items={attachmentsOf(entry)} />
+                          <AttachmentList items={attachmentsOf(entry)} onPreview={setPreviewItem} />
                           <LinkChips
                             source={entry.linked_to ? byId.get(String(entry.linked_to)) : null}
                             spawned={childrenOf.get(String(entry.id))}
@@ -2609,7 +2708,7 @@ export default function DesignLog() {
                   </div>
                 )}
 
-                <AttachmentList items={attachmentsOf(readerEntry)} />
+                <AttachmentList items={attachmentsOf(readerEntry)} onPreview={setPreviewItem} />
                 <LinkChips
                   source={readerEntry.linked_to ? byId.get(String(readerEntry.linked_to)) : null}
                   spawned={childrenOf.get(String(readerEntry.id))}
@@ -2697,7 +2796,7 @@ export default function DesignLog() {
                           )}
                         </div>
                         {comment.text && <Markdown text={comment.text} renderRef={renderRef} />}
-                        <AttachmentList items={Array.isArray(comment.attachments) ? comment.attachments : []} />
+                        <AttachmentList items={Array.isArray(comment.attachments) ? comment.attachments : []} onPreview={setPreviewItem} />
                       </div>
                     </article>
                   ))}
@@ -3217,6 +3316,7 @@ export default function DesignLog() {
           </motion.div>
         )}
       </AnimatePresence>
+      {previewItem && <AttachmentPreview item={previewItem} onClose={() => setPreviewItem(null)} />}
     </main>
   );
 }
