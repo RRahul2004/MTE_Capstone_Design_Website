@@ -4,6 +4,7 @@ import { FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createSupabaseClient } from "../../lib/supabase";
 import { ThemeSwitch } from "../../lib/theme";
+import { BrandLockup, BrandMark } from "../../lib/BrandLogo";
 import { PasswordInput } from "../../lib/PasswordInput";
 
 export default function Signup() {
@@ -54,5 +55,20 @@ export default function Signup() {
     }
   }
 
-  return <main className="auth-page hoonda-signup"><nav className="topbar shell"><a className="brand" href="/"><span className="brand-mark">MTE</span><span>MTE Capstone</span></a><div className="hoonda-nav-tail"><ThemeSwitch /><a className="text-link" href="/activity">Public design log <span>→</span></a></div></nav><section className="auth-card"><span className="eyebrow"><span className="live-dot" /> TEAM ACCESS / 03</span><h1>Join the<br /><em>design.</em></h1><p>MTE Capstone accounts are reserved for confirmed team members.</p><form onSubmit={createAccount}><label>Full name<input name="fullName" type="text" placeholder="Rahul Ramkumar" required /></label><label>Email address<input name="email" type="email" placeholder="you@example.com" required /></label><PasswordInput name="inviteCode" label="Invite code" placeholder="Enter your private code" autoComplete="off" required /><PasswordInput name="password" label="Password" placeholder="At least 8 characters" minLength={8} autoComplete="new-password" required /><button className="button button-dark" type="submit" disabled={busy}>{busy ? "Checking access..." : "Create design account →"}</button></form>{message && <p className="auth-message" role="status">{message}</p>}<p className="auth-footer">Already have access? <a href="/login">Sign in</a></p></section></main>;
+  return (
+    <main className="nr-page nr-auth">
+      <div className="nr-auth-art">
+        <BrandLockup href="/" variant="color" className="nr-lockup nr-auth-logo" />
+        <div className="nr-auth-arc" aria-hidden="true" />
+        <BrandMark className="nr-auth-mark" />
+        <p aria-hidden="true">Approachable robotics<br />for everyday life.</p>
+      </div>
+      <div className="nr-auth-side">
+        <nav className="nr-auth-nav"><a className="nr-auth-back" href="/">← Back home</a><ThemeSwitch /></nav>
+        <section className="nr-auth-card">
+          <span className="nr-kicker">Invite only</span>
+          <h1>Join the <mark>crew.</mark></h1><p>Notify Robots accounts are reserved for confirmed team members.</p><form onSubmit={createAccount}><label>Full name<input name="fullName" type="text" placeholder="Rahul Ramkumar" required /></label><label>Email address<input name="email" type="email" placeholder="you@example.com" required /></label><PasswordInput name="inviteCode" label="Invite code" placeholder="Enter your private code" autoComplete="off" required /><PasswordInput name="password" label="Password" placeholder="At least 8 characters" minLength={8} autoComplete="new-password" required /><button className="nr-btn nr-btn-ink nr-btn-block" type="submit" disabled={busy}>{busy ? "Checking access..." : "Create design account"}</button></form>{message && <p className="auth-message" role="status">{message}</p>}<p className="auth-footer">Already have access? <a href="/login">Sign in</a></p></section>
+      </div>
+    </main>
+  );
 }

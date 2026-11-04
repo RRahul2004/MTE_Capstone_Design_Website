@@ -9,10 +9,12 @@
     "lint": "next lint",
     "test": "rm -rf .test-build && tsc -p tsconfig.test.json && node --test \".test-build/tests/*.test.js\"",
     "test:watch": "rm -rf .test-build && tsc -p tsconfig.test.json && node --test --watch \".test-build/tests/*.test.js\"",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "bot": "node --env-file-if-exists=.env.local --import tsx discord-bot/bot.ts"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.116.0",
+    "discord.js": "^14.27.0",
     "framer-motion": "11.3.19",
     "next": "^14.2.35",
     "react": "18.3.1",
@@ -24,6 +26,7 @@
     "@types/react-dom": "18.3.0",
     "eslint": "^8.57.0",
     "eslint-config-next": "^14.2.35",
+    "tsx": "^4.23.15",
     "typescript": "5.5.4"
   }
 }

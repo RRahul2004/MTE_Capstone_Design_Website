@@ -3,8 +3,9 @@ import "./globals.css";
 import { themeBootstrapScript } from "../lib/theme";
 
 export const metadata: Metadata = {
-  title: "MTE Capstone | Robotics design study",
-  description: "The public design log for the MTE Capstone robotics project.",
+  title: "Notify Robots | Approachable robotics for everyday life",
+  description: "Notify Robots designs expressive, functional robots that bridge technology and people. The public design log for our MTE Capstone project.",
+  icons: { icon: "/brand/favicon.svg" },
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {

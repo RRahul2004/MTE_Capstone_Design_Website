@@ -6,10 +6,10 @@ export type Theme = "light" | "dark";
 const STORAGE_KEY = "dl-theme";
 
 /** Runs before paint (injected in layout) so there is no flash of the wrong theme. */
-export const themeBootstrapScript = `(function(){try{var s=localStorage.getItem('${STORAGE_KEY}');document.documentElement.dataset.theme=(s==='light'||s==='dark')?s:'dark';}catch(e){document.documentElement.dataset.theme='dark';}})();`;
+export const themeBootstrapScript = `(function(){try{var s=localStorage.getItem('${STORAGE_KEY}');document.documentElement.dataset.theme=(s==='light'||s==='dark')?s:'light';}catch(e){document.documentElement.dataset.theme='light';}})();`;
 
 export function useTheme() {
-  const [theme, setThemeState] = useState<Theme>("dark");
+  const [theme, setThemeState] = useState<Theme>("light");
 
   useEffect(() => {
     let stored: Theme | null = null;
@@ -18,8 +18,8 @@ export function useTheme() {
     } catch {
       /* storage blocked */
     }
-    // Dark is the product default; the OS preference does not override it.
-    const initial: Theme = stored === "light" || stored === "dark" ? stored : "dark";
+    // The warm cream brand palette is the default; the OS preference does not override it.
+    const initial: Theme = stored === "light" || stored === "dark" ? stored : "light";
     setThemeState(initial);
     document.documentElement.dataset.theme = initial;
     document.documentElement.style.colorScheme = initial;

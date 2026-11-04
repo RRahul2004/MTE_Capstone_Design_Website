@@ -36,6 +36,7 @@ alter table public.activity_logs add column if not exists edit_count int not nul
 alter table public.activity_logs add column if not exists deliverable_type text;
 alter table public.activity_logs add column if not exists due_date date;
 alter table public.activity_logs add column if not exists submitted_at timestamptz;
+alter table public.activity_logs add column if not exists source_message_id text; -- Discord message + attachment id for bot deduplication
 alter table public.activity_logs add column if not exists user_id uuid references auth.users (id) on delete set null;
 
 -- The app no longer sets a status, so make sure the column has a default
@@ -65,6 +66,10 @@ alter table public.activity_logs
 
 create index if not exists activity_logs_kind_created_idx
   on public.activity_logs (kind, created_at desc);
+
+create unique index if not exists activity_logs_source_message_uidx
+  on public.activity_logs (source_message_id)
+  where source_message_id is not null;
 
 -- 3. Cross-stream link + comments table, typed to match your existing id column
 --    (uuid, bigint, or int — whatever activity_logs.id happens to be).

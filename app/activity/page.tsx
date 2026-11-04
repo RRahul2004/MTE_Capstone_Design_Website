@@ -1,7 +1,9 @@
 "use client";
 
 import { FormEvent, useEffect, useMemo, useState } from "react";
-import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
+import { Icon, type IconName } from "../../lib/icons";
+import { AnimatePresence, animate, motion, useReducedMotion, useScroll, useSpring } from "framer-motion";
+import { SiteFooter } from "../../lib/SiteChrome";
 import { createSupabaseClient } from "../../lib/supabase";
 import { Markdown } from "../../lib/markdown";
 import { prettyName, resolveDisplayName, teamNames } from "../../lib/team";
@@ -17,6 +19,7 @@ import {
   storagePathsOf,
 } from "../../lib/attachments";
 import { ThemeToggle, useTheme } from "../../lib/theme";
+import { BrandMark } from "../../lib/BrandLogo";
 import "./design-log.css";
 
 type Kind = "ideation" | "research" | "progress" | "meeting" | "deliverable";
@@ -110,6 +113,25 @@ const deliverableTypes: DeliverableType[] = [
   "Other",
 ];
 const resourceTypes: ResourceType[] = ["Patent", "Paper", "Publication", "Standard", "Datasheet", "Article", "Teardown"];
+
+const tabIcons: Record<Kind, IconName> = {
+  ideation: "rocket",
+  research: "eye",
+  progress: "gear",
+  meeting: "person",
+  deliverable: "layers",
+};
+
+const heroWords = ["every idea.", "every test.", "every decision.", "everything built."];
+
+function CountUp({ value }: { value: number }) {
+  const [shown, setShown] = useState(0);
+  useEffect(() => {
+    const controls = animate(0, value, { duration: 1.1, ease: [0.22, 1, 0.36, 1], onUpdate: (v) => setShown(Math.round(v)) });
+    return () => controls.stop();
+  }, [value]);
+  return <>{shown}</>;
+}
 
 const tabs: { key: Kind; label: string; blurb: string }[] = [
   { key: "ideation", label: "Ideation", blurb: "Concepts, directions, and arguments — written long-form." },
@@ -540,6 +562,40 @@ export default function DesignLog() {
       }),
     [visible],
   );
+
+  const [heroWord, setHeroWord] = useState(0);
+  const { scrollYProgress } = useScroll();
+  const scrollBar = useSpring(scrollYProgress, { stiffness: 120, damping: 24 });
+  const [showTop, setShowTop] = useState(false);
+  useEffect(() => {
+    const onScroll = () => setShowTop(window.scrollY > 900);
+    onScroll();
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => window.removeEventListener("scroll", onScroll);
+  }, []);
+  const latest = useMemo(
+    () => [...entries].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()).slice(0, 5),
+    [entries],
+  );
+  useEffect(() => {
+    if (reduceMotion) return;
+    const id = window.setInterval(() => setHeroWord((w) => (w + 1) % heroWords.length), 2600);
+    return () => window.clearInterval(id);
+  }, [reduceMotion]);
+
+  const weekly = useMemo(() => {
+    const week = 7 * 24 * 60 * 60 * 1000;
+    const now = Date.now();
+    const buckets = Array.from({ length: 12 }, () => 0);
+    entries.forEach((entry) => {
+      const age = Math.floor((now - new Date(entry.created_at).getTime()) / week);
+      if (age >= 0 && age < 12) buckets[11 - age] += 1;
+    });
+    return buckets;
+  }, [entries]);
+  const weeklyMax = Math.max(1, ...weekly);
+  const thisWeek = weekly[11];
+  const contributorCount = useMemo(() => new Set(entries.map((entry) => entry.author_name)).size, [entries]);
 
   const nextDue = useMemo(
     () =>
@@ -1543,14 +1599,15 @@ export default function DesignLog() {
 
   return (
     <main className="dl-root">
+      <motion.div className="dlx-progress" style={{ scaleX: scrollBar }} aria-hidden="true" />
       <header className="dl-topbar">
         <div className="dl-shell dl-topbar-inner">
-          <a className="dl-brand" href="/">
-            <span className="dl-brand-mark">MTE</span>
-            <span>MTE Capstone</span>
+          <a className="dl-brand" href="/" aria-label="Notify Robots home">
+            <BrandMark className="dl-brand-mark" />
+            <span>notify robots</span>
           </a>
           <nav className="dl-nav">
-            <a href="/">Mission</a>
+            <a href="/">Home</a>
             <a className="is-active" href="/activity">
               Design log
             </a>
@@ -1579,55 +1636,98 @@ export default function DesignLog() {
         </div>
       </header>
 
-      <section className="dl-shell dl-hero">
-        <motion.div initial={{ opacity: 0, y: 18 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5 }}>
-          <span className="dl-eyebrow">
+      <section className="dl-shell dl-hero dlx-hero">
+        <div className="dlx-hero-copy">
+          <motion.span className="dl-eyebrow" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5, ease }}>
             <span className="dl-dot" /> Live design log · Rev {String(entries.length).padStart(3, "0")}
-          </span>
-          <div className="dl-hero-grid">
-            <div>
-              <h1>
-                Ideas, evidence,
-                <br />
-                <em>and everything built.</em>
-              </h1>
-              <p>
-                The MTE Capstone design record, split into three streams: where the ideas come from, what the
-                literature says, and what we actually built today.
-              </p>
-            </div>
-            <motion.div
-              className="dl-hero-meta"
-              initial="hidden"
-              animate="visible"
-              variants={{ visible: { transition: { staggerChildren: reduceMotion ? 0 : 0.06, delayChildren: 0.1 } } }}
+          </motion.span>
+          <motion.h1 initial={{ opacity: 0, y: 24 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.7, delay: 0.08, ease }}>
+            In public:
+            <span className="dlx-rotator">
+              <AnimatePresence mode="wait" initial={false}>
+                <motion.em
+                  key={heroWords[heroWord]}
+                  initial={{ y: "80%", opacity: 0, rotateX: -70 }}
+                  animate={{ y: 0, opacity: 1, rotateX: 0 }}
+                  exit={{ y: "-80%", opacity: 0, rotateX: 70 }}
+                  transition={{ duration: 0.45, ease }}
+                >
+                  {heroWords[heroWord]}
+                </motion.em>
+              </AnimatePresence>
+            </span>
+          </motion.h1>
+          <motion.p initial={{ opacity: 0, y: 18 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.6, delay: 0.16, ease }}>
+            The Notify Robots design record: where the ideas come from, what the research says, what we built, what we
+            decided, and what we hand in.
+          </motion.p>
+          <motion.div className="dlx-hero-actions" initial={{ opacity: 0, y: 18 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.6, delay: 0.24, ease }}>
+            {userEmail ? (
+              <button className="dl-btn dl-btn-primary dlx-big" onClick={openComposer}>+ New entry</button>
+            ) : (
+              <a className="dl-btn dl-btn-primary dlx-big" href="/login">Sign in to contribute</a>
+            )}
+            <span className="dlx-week">
+              <b>{thisWeek}</b> {thisWeek === 1 ? "entry" : "entries"} this week · <b>{contributorCount}</b> contributors · <b>{libraryCount}</b> files & links
+            </span>
+          </motion.div>
+        </div>
+
+        <motion.div
+          className="dlx-board"
+          initial="hidden"
+          animate="visible"
+          variants={{ visible: { transition: { staggerChildren: reduceMotion ? 0 : 0.07, delayChildren: 0.15 } } }}
+        >
+          {([
+            ["ideation", "Ideas", counts.ideation],
+            ["research", "Research", counts.research],
+            ["progress", "Progress", counts.progress],
+            ["meeting", "Meetings", counts.meeting],
+          ] as const).map(([key, label, value]) => (
+            <motion.button
+              type="button"
+              key={label}
+              className={`dlx-stat dlx-stat-${key}`}
+              onClick={() => { setTab(key); setExpanded(null); }}
+              variants={{ hidden: { opacity: 0, y: reduceMotion ? 0 : 20, scale: 0.96 }, visible: { opacity: 1, y: 0, scale: 1, transition: { duration: 0.5, ease } } }}
+              whileHover={reduceMotion ? undefined : { y: -5 }}
             >
-              <motion.div variants={{ hidden: { opacity: 0, x: reduceMotion ? 0 : 12 }, visible: { opacity: 1, x: 0 } }}>
-                <span>Ideation</span>
-                <b>{counts.ideation}</b>
-              </motion.div>
-              <motion.div variants={{ hidden: { opacity: 0, x: reduceMotion ? 0 : 12 }, visible: { opacity: 1, x: 0 } }}>
-                <span>Research</span>
-                <b>{counts.research}</b>
-              </motion.div>
-              <motion.div variants={{ hidden: { opacity: 0, x: reduceMotion ? 0 : 12 }, visible: { opacity: 1, x: 0 } }}>
-                <span>Progress</span>
-                <b>{counts.progress}</b>
-              </motion.div>
-              <motion.div variants={{ hidden: { opacity: 0, x: reduceMotion ? 0 : 12 }, visible: { opacity: 1, x: 0 } }}>
-                <span>Files & links</span>
-                <b>{libraryCount}</b>
-              </motion.div>
-              <motion.div variants={{ hidden: { opacity: 0, x: reduceMotion ? 0 : 12 }, visible: { opacity: 1, x: 0 } }}>
-                <span>Open actions</span>
-                <b>{openActions}</b>
-              </motion.div>
-              <motion.div variants={{ hidden: { opacity: 0, x: reduceMotion ? 0 : 12 }, visible: { opacity: 1, x: 0 } }}>
-                <span>Next due</span>
-                <b className="accent">{nextDue?.due_date ? formatDate(nextDue.due_date) : "—"}</b>
-              </motion.div>
-            </motion.div>
-          </div>
+              <span className="dlx-stat-icon"><Icon name={tabIcons[key]} size={18} /></span>
+              <b><CountUp value={value} /></b>
+              <small>{label}</small>
+            </motion.button>
+          ))}
+          <motion.div className="dlx-pulse" variants={{ hidden: { opacity: 0, y: reduceMotion ? 0 : 20 }, visible: { opacity: 1, y: 0, transition: { duration: 0.5, ease } } }}>
+            <div className="dlx-pulse-head">
+              <span>Activity · last 12 weeks</span>
+              <span className="dlx-pulse-live"><i /> live</span>
+            </div>
+            <div className="dlx-bars" aria-label={`Entries per week over the last 12 weeks: ${weekly.join(", ")}`}>
+              {weekly.map((value, index) => (
+                <motion.span
+                  key={index}
+                  className={index === 11 ? "is-now" : ""}
+                  title={`${value} ${value === 1 ? "entry" : "entries"}`}
+                  initial={{ scaleY: 0 }}
+                  animate={{ scaleY: 1 }}
+                  transition={{ duration: 0.6, delay: 0.4 + index * 0.04, ease }}
+                  style={{ height: `${Math.max(6, (value / weeklyMax) * 100)}%` }}
+                />
+              ))}
+            </div>
+          </motion.div>
+          <motion.div className="dlx-due" variants={{ hidden: { opacity: 0, y: reduceMotion ? 0 : 20 }, visible: { opacity: 1, y: 0, transition: { duration: 0.5, ease } } }}>
+            <div>
+              <small>Next due</small>
+              <b>{nextDue?.due_date ? formatDate(nextDue.due_date) : "Nothing due"}</b>
+              {nextDue && <span>{nextDue.title || nextDue.deliverable_type || "Deliverable"}</span>}
+            </div>
+            <div className="dlx-due-actions">
+              <b><CountUp value={openActions} /></b>
+              <small>open actions</small>
+            </div>
+          </motion.div>
         </motion.div>
       </section>
 
@@ -1642,6 +1742,7 @@ export default function DesignLog() {
                 setExpanded(null);
               }}
             >
+              <Icon name={tabIcons[item.key]} size={16} />
               <b>{item.label}</b>
               <span>{counts[item.key]}</span>
               {tab === item.key && (
@@ -2209,7 +2310,7 @@ export default function DesignLog() {
             grouped.map((group) => (
               <div className="dl-daygroup" key={group.label}>
                 <div className="dl-day">
-                  {group.label}
+                  <span className="dlx-day-label">{group.label}</span>
                   <span className="line" />
                   {group.items.length} {group.items.length === 1 ? "entry" : "entries"}
                 </div>
@@ -2298,32 +2399,57 @@ export default function DesignLog() {
         </section>
 
         <aside className="dl-side">
+          <motion.div className="dl-panel dlx-cta-panel" initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5, delay: 0.2, ease }}>
+            <motion.span className="dlx-cta-mark" aria-hidden="true" animate={reduceMotion ? undefined : { y: [0, -6, 0], rotate: [-4, 4, -4] }} transition={{ duration: 5, repeat: Infinity, ease: "easeInOut" }}>
+              <BrandMark className="nr-mark" />
+            </motion.span>
+            <h3>{userEmail ? `Hey ${authorName.split(" ")[0]}, got an update?` : "Part of the crew?"}</h3>
+            <p className="dl-panel-copy">
+              {userEmail
+                ? "Post ideation, research, progress, or minutes. Attach PDFs, CAD, PCB files, decks, or links."
+                : "The log is public to read. Sign in with a crew account to publish entries."}
+            </p>
+            {userEmail ? (
+              <button className="dl-btn dl-btn-primary" onClick={openComposer}>+ New entry</button>
+            ) : (
+              <a className="dl-btn dl-btn-primary" href="/login">Sign in to post</a>
+            )}
+          </motion.div>
+
           <div className="dl-panel">
-            <h3>Streams</h3>
-            <div className="dl-split">
-              {tabs.map((item) => (
-                <button
-                  key={item.key}
-                  className={tab === item.key ? "dl-stream is-on" : "dl-stream"}
-                  onClick={() => setTab(item.key)}
+            <h3>Latest across streams</h3>
+            <div className="dlx-latest">
+              {latest.map((entry, index) => (
+                <motion.button
+                  type="button"
+                  key={entry.id}
+                  className="dlx-latest-item"
+                  onClick={() => openReader(entry)}
+                  initial={{ opacity: 0, x: reduceMotion ? 0 : 12 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  transition={{ duration: 0.4, delay: 0.25 + index * 0.06, ease }}
                 >
-                  <b>{item.label}</b>
-                  <span>{counts[item.key]}</span>
-                </button>
+                  <span className={`dlx-latest-icon k-${entry.kind}`}><Icon name={tabIcons[entry.kind]} size={14} /></span>
+                  <span className="dlx-latest-text">
+                    <b>{entry.title || excerpt(entry.text, 54)}</b>
+                    <small>{entry.author_name} · {formatDate(entry.created_at)}</small>
+                  </span>
+                </motion.button>
               ))}
+              {latest.length === 0 && <span className="dl-count">No entries yet</span>}
             </div>
           </div>
 
           <div className="dl-panel">
             <h3>Discipline split</h3>
             <div className="dl-split">
-              {categoryBreakdown.map((entry) => (
+              {categoryBreakdown.map((entry, index) => (
                 <div className="dl-split-row" key={entry.option}>
                   <span>
                     {entry.option} <b>{entry.count}</b>
                   </span>
                   <span className="dl-track">
-                    <i style={{ width: `${Math.max(entry.pct, 6)}%` }} />
+                    <motion.i initial={{ width: 0 }} animate={{ width: `${Math.max(entry.pct, 6)}%` }} transition={{ duration: 0.9, delay: 0.3 + index * 0.07, ease }} />
                   </span>
                 </div>
               ))}
@@ -2334,44 +2460,39 @@ export default function DesignLog() {
           <div className="dl-panel">
             <h3>Contributors</h3>
             <div className="dl-people">
-              {contributors.map((person) => (
-                <div className="dl-person" key={person.name}>
+              {contributors.map((person, index) => (
+                <div className="dl-person dlx-person" key={person.name}>
                   <span className={`badge ${toneFor(person.name)}`}>{initials(person.name)}</span>
                   <span className="nm">{person.name}</span>
                   <span className="ct">{person.count}</span>
+                  <span className="dlx-person-bar">
+                    <motion.i initial={{ scaleX: 0 }} animate={{ scaleX: person.count / Math.max(1, contributors[0]?.count || 1) }} transition={{ duration: 0.9, delay: 0.3 + index * 0.06, ease }} />
+                  </span>
                 </div>
               ))}
             </div>
           </div>
-
-          <div className="dl-panel">
-            <h3>Posting access</h3>
-            <p className="dl-panel-copy">
-              {userEmail
-                ? "You are signed in. Post ideation, research, or progress — attach PDFs, CAD, PCB files, decks, or links."
-                : "The log is public to read. Sign in with a crew account to publish entries."}
-            </p>
-            {userEmail ? (
-              <button className="dl-btn dl-btn-primary" onClick={openComposer}>
-                + New entry
-              </button>
-            ) : (
-              <a className="dl-btn dl-btn-primary" href="/login">
-                Sign in to post
-              </a>
-            )}
-          </div>
         </aside>
       </div>
 
-      <footer className="dl-shell dl-footer">
-        <a className="dl-brand" href="/">
-          <span className="dl-brand-mark">MTE</span>
-          <span>MTE Capstone</span>
-        </a>
-        <span>Robotics design study · 2026</span>
-        <span>Public design log · team posting</span>
-      </footer>
+      <AnimatePresence>
+        {showTop && (
+          <motion.button
+            type="button"
+            className="dlx-top"
+            aria-label="Back to top"
+            onClick={() => window.scrollTo({ top: 0, behavior: reduceMotion ? "auto" : "smooth" })}
+            initial={{ opacity: 0, scale: 0.6, y: 20 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.6, y: 20 }}
+            whileHover={{ y: -4 }}
+          >
+            ↑
+          </motion.button>
+        )}
+      </AnimatePresence>
+
+      <SiteFooter />
 
       {/* ---------------- FULLSCREEN READER ---------------- */}
       <AnimatePresence>
